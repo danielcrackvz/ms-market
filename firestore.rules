@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Perfiles de usuario: cualquiera puede leer (para mostrar el nombre del
+    // vendedor), pero solo el propio usuario puede crear/editar su perfil.
+    match /usuarios/{userId} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Productos: cualquiera puede ver el catálogo. Solo un usuario logueado
+    // puede publicar, y solo el vendedor dueño puede editar/borrar su producto.
+    match /productos/{productoId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.vendedorId;
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.vendedorId;
+    }
+
+    // Transacciones: solo el comprador o el vendedor involucrados pueden verlas.
+    // El comprador puede crearla; solo el vendedor puede confirmarla.
+    match /transacciones/{txId} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == resource.data.compradorId || request.auth.uid == resource.data.vendedorId);
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.compradorId;
+      allow update: if request.auth != null && request.auth.uid == resource.data.vendedorId;
+    }
+
+    // Conversaciones y mensajes: solo los dos participantes pueden leer/escribir.
+    match /conversaciones/{convId} {
+      allow read, create: if request.auth != null &&
+        request.auth.uid in request.resource.data.participantes;
+      allow read, update: if request.auth != null &&
+        request.auth.uid in resource.data.participantes;
+
+      match /mensajes/{msgId} {
+        allow read, create: if request.auth != null &&
+          request.auth.uid in get(/databases/$(database)/documents/conversaciones/$(convId)).data.participantes;
+      }
+    }
+  }
+}
